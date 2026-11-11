@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB3 Oefenomgeving</title>
+  <meta name="description" content="Oefenomgeving voor Databases 3 (DATAB3SO): uitleg, flashcards, oefenquizzen en een proeftoets over SQL Server.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c6002a'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' font-weight='700' text-anchor='middle' fill='%23ffffff'%3EDB3%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sofia+Sans+Extra+Condensed:wght@700;800&family=Hanken+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="index.html"><span class="brand-mark">DB<b>3</b></span><span class="t">Oefenomgeving</span></a>
+      <nav class="nav" aria-label="Hoofdmenu">
+        <a href="index.html" aria-current="page">Overzicht</a>
+        <a href="proeftoets.html"><span class="long">Proef</span>toets</a>
+      </nav>
+      <button type="button" class="icon-btn" id="theme-btn" aria-label="Thema wisselen">☾</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <span class="eyebrow">Databases 3 · SQL Server</span>
+        <h1>Snap de stof, dan <em>volgt</em> de toets vanzelf.</h1>
+        <p class="lead">Vijftien onderwerpen uit DATAB3SO, van ACID tot Full Text Search. Per onderwerp krijg je uitleg met voorbeelden uit WideWorldImporters, kernpunten, flashcards en een oefenquiz. Afsluiten doe je met een proeftoets volgens de toetsmatrijs.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" id="continue" href="onderwerp.html?id=acid">Begin bij ACID →</a>
+          <a class="btn btn-ghost" href="proeftoets.html">Doe de proeftoets</a>
+        </div>
+      </div>
+      <div class="console" aria-hidden="true">
+        <div class="console-bar"><i></i><i></i><i></i></div>
+        <pre><code class="sql">BEGIN TRANSACTION;
+  UPDATE Student
+  SET    Kennis = Kennis + 1
+  WHERE  Onderwerp IN (SELECT id
+                       FROM   DB3.Onderwerpen);
+COMMIT;</code>
+<span class="out">-- (15 rows affected)</span></pre>
+      </div>
+    </section>
+
+    <div class="stats" id="stats"></div>
+
+    <section>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Toetsmatrijs</span>
+          <h2>Waar de punten zitten</h2>
+        </div>
+        <p class="muted" style="max-width:42ch;margin:0">De toets telt 45 vragen: 3 per onderwerp. Alle 15 onderwerpen wegen dus even zwaar, elk 1/15 van je score.</p>
+      </div>
+      <div class="matrix" id="matrix"></div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section id="topics"><p class="empty">Onderwerpen laden…</p></section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>De oefenvragen zijn zelf geschreven om de stof te oefenen. Het zijn niet de echte toetsvragen.</span>
+      <span>Voortgang wordt alleen in deze browser bewaard · <button type="button" class="linklike" id="reset">voortgang wissen</button></span>
+    </div>
+  </footer>
+
+  <script src="js/db3.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    (function () {
+      const { $, esc } = DB3.util;
+      DB3.initTheme();
+      DB3.enhanceCode(document.querySelector(".console"));
+
+      DB3.loadTopics().then(() => {
+        const topics = DB3.ordered();
+        const nCards = topics.reduce((s, t) => s + t.flashcards.length, 0);
+        const nQuiz = topics.reduce((s, t) => s + t.quiz.length, 0);
+        const avg = topics.length ? Math.round(topics.reduce((s, t) => s + DB3.mastery(t), 0) / topics.length) : 0;
+
+        $("#stats").innerHTML = [
+          [topics.length, "onderwerpen"], [nCards, "flashcards"], [nQuiz, "oefenvragen"], [avg + "%", "jouw beheersing"],
+        ].map(([b, s]) => '<div class="stat"><b>' + b + "</b><span>" + s + "</span></div>").join("");
+
+        /* toetsmatrijs: elk onderwerp telt 3 van de 45 vragen, dus elk onderwerp weegt even zwaar */
+        $("#matrix").innerHTML = DB3.catalog.map((t) =>
+          '<div style="flex:1;background:' + DB3.clusterColors[t.cluster] + '" title="' + esc(t.title) + ': 3 vragen (' + (100 / DB3.catalog.length).toFixed(1).replace(".", ",") + '%)">' + esc(t.icon) + "<small>3</small></div>").join("");
+        $("#legend").innerHTML = DB3.clusters.map((c) => {
+          const n = DB3.catalog.filter((t) => t.cluster === c.id).length;
+          return '<span style="--c:' + DB3.clusterColors[c.id] + '">' + esc(c.title) + " · " + n + (n === 1 ? " onderwerp" : " onderwerpen") + "</span>";
+        }).join("");
+
+        /* onderwerpen per cluster */
+        let k = 0;
+        $("#topics").innerHTML = DB3.clusters.map((c) => {
+          const ts = DB3.catalog.filter((t) => t.cluster === c.id);
+          return '<div class="cluster"><div class="cluster-head"><h3>' + esc(c.title) + '</h3><span class="muted" style="font-size:14px">' + esc(c.goal) + '</span><span class="pct">' + ts.length + " × 3 vragen</span></div>" +
+            '<div class="grid">' + ts.map((meta) => {
+              const t = DB3.getTopic(meta.id);
+              const i = k++;
+              if (!t) return '<div class="tcard is-missing" style="--i:' + i + '"><div class="tcard-body"><h4>' + esc(meta.title) + "</h4><p>Nog niet beschikbaar</p></div></div>";
+              const p = DB3.progress.topic(t.id);
+              const m = DB3.mastery(t);
+              const first = t.intro.split(/(?<=[.!?])\s/)[0];
+              return '<a class="tcard" style="--i:' + i + '" href="onderwerp.html?id=' + t.id + '">' +
+                '<div class="tcard-head"><span>Week ' + t.week + "</span><b>" + m + "%</b></div>" +
+                '<div class="tcard-body"><div class="tcard-title"><span class="tcard-icon">' + esc(t.icon) + "</span><h4>" + esc(t.title) + "</h4></div>" +
+                "<p>" + esc(first) + "</p>" +
+                '<div class="rows"><div class="r"><span>Uitleg</span><span>' + (p.lesson ? "gelezen ✓" : "–") + "</span></div>" +
+                '<div class="r"><span>Flashcards</span><span>' + (p.known || []).length + "/" + t.flashcards.length + "</span></div>" +
+                '<div class="r"><span>Quiz (beste)</span><span>' + (p.quizBest != null ? p.quizBest + "%" : "–") + "</span></div>" +
+                '<div class="meter"><i style="--v:' + m + '%"></i></div></div></div></a>';
+            }).join("") + "</div></div>";
+        }).join("");
+
+        /* knop 'verder': eerste onderwerp dat nog niet beheerst wordt */
+        const next = topics.find((t) => DB3.mastery(t) < 80);
+        const btn = $("#continue");
+        if (next && topics.some((t) => DB3.mastery(t) > 0)) { btn.href = "onderwerp.html?id=" + next.id; btn.textContent = "Verder met " + next.title + " →"; }
+        else if (!next) { btn.href = "proeftoets.html"; btn.textContent = "Alles beheerst: doe de proeftoets →"; }
+      });
+
+      $("#reset").addEventListener("click", () => {
+        const b = $("#reset");
+        if (b.dataset.armed) { DB3.progress.reset(); location.reload(); return; }
+        b.dataset.armed = "1"; b.textContent = "zeker weten? klik nogmaals";
+        setTimeout(() => { delete b.dataset.armed; b.textContent = "voortgang wissen"; }, 3000);
+      });
+    })();
+  </script>
+</body>
+</html>

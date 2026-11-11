@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB3 Onderwerp</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c6002a'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' font-weight='700' text-anchor='middle' fill='%23ffffff'%3EDB3%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sofia+Sans+Extra+Condensed:wght@700;800&family=Hanken+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="index.html"><span class="brand-mark">DB<b>3</b></span><span class="t">Oefenomgeving</span></a>
+      <nav class="nav" aria-label="Hoofdmenu">
+        <a href="index.html">Overzicht</a>
+        <a href="proeftoets.html"><span class="long">Proef</span>toets</a>
+      </nav>
+      <button type="button" class="icon-btn" id="theme-btn" aria-label="Thema wisselen">☾</button>
+    </div>
+  </header>
+
+  <main class="wrap" id="app"><p class="empty">Laden…</p></main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span id="prevnext"></span>
+      <span>De oefenvragen zijn zelf geschreven, het zijn niet de echte toetsvragen.</span>
+    </div>
+  </footer>
+
+  <script src="js/db3.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    (function () {
+      const { $, $$, esc, pad } = DB3.util;
+      DB3.initTheme();
+      const id = new URLSearchParams(location.search).get("id") || "acid";
+      const app = $("#app");
+
+      DB3.loadTopics().then(() => {
+        const t = DB3.getTopic(id);
+        if (!t) { app.innerHTML = '<p class="empty">Onderwerp niet gevonden. <a href="index.html">Terug naar het overzicht</a></p>'; return; }
+        document.title = t.title + " · DB3";
+        const cluster = DB3.clusterOf(t.cluster);
+
+        const TABS = [
+          { id: "uitleg", label: "Uitleg", count: t.sections.length },
+          { id: "kern", label: "Kernpunten & valkuilen", count: t.keyPoints.length + t.pitfalls.length },
+          { id: "kaarten", label: "Flashcards", count: t.flashcards.length },
+          { id: "quiz", label: "Oefenquiz", count: t.quiz.length },
+        ];
+
+        app.innerHTML =
+          '<section class="topic-hero"><div class="big-icon" aria-hidden="true">' + esc(t.icon) + "</div>" +
+          '<div><span class="eyebrow">Week ' + t.week + " · " + esc(cluster.title || "") + "</span><h1 style=\"font-size:clamp(36px,5vw,58px)\">" + esc(t.title) + "</h1><p>" + t.intro + "</p></div>" +
+          '<div class="ring" id="ring"><span></span></div></section>' +
+          '<div class="tabs" role="tablist">' + TABS.map((x) => '<button type="button" class="tab" role="tab" id="tab-' + x.id + '" aria-controls="p-' + x.id + '" aria-selected="false" data-tab="' + x.id + '">' + x.label + ' <span class="count">' + x.count + "</span></button>").join("") + "</div>" +
+          TABS.map((x) => '<section class="panel" role="tabpanel" id="p-' + x.id + '" aria-labelledby="tab-' + x.id + '" hidden></section>').join("");
+
+        const ring = () => { const m = DB3.mastery(t); const r = $("#ring"); r.style.setProperty("--v", m); r.querySelector("span").innerHTML = m + "%<small>beheersing</small>"; };
+        ring();
+
+        /* --- Uitleg --- */
+        const pU = $("#p-uitleg");
+        const lessonDone = () => !!DB3.progress.topic(t.id).lesson;
+        pU.innerHTML = '<div class="lesson"><nav class="toc" aria-label="Inhoud"><ol>' +
+          t.sections.map((s, i) => '<li><a href="#s-' + i + '">' + esc(s.title) + "</a></li>").join("") + "</ol></nav>" +
+          '<article class="prose">' + t.sections.map((s, i) => '<section id="s-' + i + '"><h2><span class="n">' + pad(i + 1) + "</span>" + esc(s.title) + "</h2>" + s.body + "</section>").join("") +
+          '<div class="lesson-done"><div style="flex:1"><strong>Klaar met lezen?</strong><div class="muted" style="font-size:15px">Daarna: kernpunten herhalen en de flashcards doen.</div></div>' +
+          '<button type="button" class="btn btn-primary btn-small" id="mark"></button></div></article></div>';
+        DB3.enhanceCode(pU);
+        const paintMark = () => { $("#mark").textContent = lessonDone() ? "Gelezen ✓" : "Markeer als gelezen"; };
+        paintMark();
+        $("#mark").addEventListener("click", () => {
+          const done = !lessonDone();
+          DB3.progress.update(t.id, (p) => { p.lesson = done; return p; });
+          paintMark(); ring();
+          if (done) select("kern");
+        });
+        /* toc scrollspy + klik zonder hash-tabwissel */
+        $$(".toc a", pU).forEach((a) => a.addEventListener("click", (e) => {
+          e.preventDefault(); document.querySelector(a.getAttribute("href")).scrollIntoView({ behavior: "smooth" });
+        }));
+        if ("IntersectionObserver" in window) {
+          const links = $$(".toc a", pU);
+          const io = new IntersectionObserver((entries) => entries.forEach((en) => {
+            if (en.isIntersecting) links.forEach((l) => l.classList.toggle("active", l.getAttribute("href") === "#" + en.target.id));
+          }), { rootMargin: "-140px 0px -60% 0px" });
+          $$(".prose section", pU).forEach((s) => io.observe(s));
+        }
+
+        /* --- Kernpunten & valkuilen --- */
+        $("#p-kern").innerHTML = '<div class="two-col"><div><span class="eyebrow">Onthoud</span><h2 style="margin:8px 0 18px">Kernpunten</h2><ol class="keypoints">' +
+          t.keyPoints.map((k) => "<li>" + k + "</li>").join("") + "</ol></div>" +
+          '<div><span class="eyebrow">Pas op</span><h2 style="margin:8px 0 18px">Valkuilen</h2>' +
+          t.pitfalls.map((p) => '<div class="pitfall"><div class="w">' + p.wrong + '</div><div class="r">' + p.right + "</div></div>").join("") + "</div></div>" +
+          '<div class="hero-actions" style="margin-top:28px"><button type="button" class="btn btn-primary" data-go="kaarten">Naar de flashcards →</button><button type="button" class="btn btn-ghost" data-go="quiz">Direct de quiz</button></div>';
+
+        /* --- Flashcards & quiz (lui gemount) --- */
+        const pK = $("#p-kaarten"), pQ = $("#p-quiz");
+        let mountedK = false, mountedQ = false;
+
+        let current = null;
+        function select(tab, push) {
+          if (!TABS.some((x) => x.id === tab)) tab = "uitleg";
+          current = tab;
+          $$(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+          $$(".panel").forEach((p) => (p.hidden = p.id !== "p-" + tab));
+          if (tab === "kaarten" && !mountedK) { mountedK = true; DB3.mountFlashcards(pK, t, { onChange: ring }); }
+          if (tab === "quiz" && !mountedQ) { mountedQ = true; DB3.mountQuiz(pQ, t, { onFinish: ring }); }
+          if (push !== false) history.replaceState(null, "", "#" + tab);
+        }
+        $$(".tab").forEach((b) => b.addEventListener("click", () => { select(b.dataset.tab); window.scrollTo({ top: $(".tabs").offsetTop - 64, behavior: "smooth" }); }));
+        app.addEventListener("click", (e) => { const g = e.target.closest("[data-go]"); if (g) { select(g.dataset.go); window.scrollTo({ top: $(".tabs").offsetTop - 64, behavior: "smooth" }); } });
+        select((location.hash || "#uitleg").slice(1), false);
+
+        document.addEventListener("keydown", (e) => {
+          if (e.target.closest && e.target.closest("input, textarea")) return;
+          if (current === "kaarten" && pK._keys) pK._keys(e);
+          if (current === "quiz" && pQ._keys) pQ._keys(e);
+        });
+
+        /* vorige / volgende onderwerp */
+        const order = DB3.ordered();
+        const i = order.findIndex((x) => x.id === t.id);
+        const prev = order[i - 1], next = order[i + 1];
+        $("#prevnext").innerHTML = (prev ? '<a href="onderwerp.html?id=' + prev.id + '">← ' + esc(prev.title) + "</a>" : "") +
+          (prev && next ? " · " : "") + (next ? '<a href="onderwerp.html?id=' + next.id + '">' + esc(next.title) + " →</a>" : '<a href="proeftoets.html">Proeftoets →</a>');
+      });
+    })();
+  </script>
+</body>
+</html>

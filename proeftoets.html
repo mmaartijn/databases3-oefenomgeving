@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB3 Proeftoets</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c6002a'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' font-weight='700' text-anchor='middle' fill='%23ffffff'%3EDB3%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sofia+Sans+Extra+Condensed:wght@700;800&family=Hanken+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="index.html"><span class="brand-mark">DB<b>3</b></span><span class="t">Oefenomgeving</span></a>
+      <nav class="nav" aria-label="Hoofdmenu">
+        <a href="index.html">Overzicht</a>
+        <a href="proeftoets.html" aria-current="page"><span class="long">Proef</span>toets</a>
+      </nav>
+      <button type="button" class="icon-btn" id="theme-btn" aria-label="Thema wisselen">☾</button>
+    </div>
+  </header>
+
+  <main class="wrap" id="app"><p class="empty">Laden…</p></main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <span>De proeftoets trekt willekeurig 3 vragen per onderwerp uit de oefenvragen. Het zijn niet de echte toetsvragen.</span>
+    </div>
+  </footer>
+
+  <script src="js/db3.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    (function () {
+      const { $, $$, esc, pad } = DB3.util;
+      DB3.initTheme();
+      const app = $("#app");
+      const PER_TOPIC = 3;
+      const LETTERS = ["A", "B", "C", "D"];
+      let qs, answers, flags, cur, startedAt, timerId;
+
+      DB3.loadTopics().then(intro);
+
+      function intro() {
+        clearInterval(timerId);
+        const n = DB3.ordered().length * PER_TOPIC;
+        const hist = DB3.exams.all();
+        app.innerHTML = '<div class="exam-intro"><span class="eyebrow">Proeftoets</span><h1 style="font-size:clamp(36px,5vw,58px);margin:10px 0 16px">' + n + " vragen, net als het echte werk.</h1>" +
+          '<p class="lead">De vragen zijn verdeeld volgens de toetsmatrijs: 3 per onderwerp, in willekeurige volgorde. Je krijgt pas feedback als je inlevert.</p>' +
+          "<ul><li>Navigeer vrij tussen de vragen en markeer vragen waar je over twijfelt.</li><li>Toetsen <kbd>1</kbd>–<kbd>4</kbd> of <kbd>A</kbd>–<kbd>D</kbd> kiezen een antwoord, <kbd>←</kbd> <kbd>→</kbd> bladeren.</li><li>Na het inleveren zie je per onderwerp hoe je ervoor staat, met een link naar de uitleg.</li></ul>" +
+          '<div class="hero-actions" style="margin-top:26px"><button type="button" class="btn btn-primary" id="start">Start de proeftoets →</button></div>' +
+          (hist.length ? '<h3 style="margin:44px 0 12px">Eerdere pogingen</h3><div class="review-list">' + hist.slice(0, 5).map((h) =>
+            '<div class="review-item ' + (h.pct >= 55 ? "ok" : "bad") + '"><strong>' + h.good + "/" + h.total + " (" + h.pct + "%)</strong> · " + new Date(h.date).toLocaleString("nl-NL", { dateStyle: "medium", timeStyle: "short" }) + " · " + Math.round(h.secs / 60) + " min</div>").join("") + "</div>" : "") +
+          "</div>";
+        $("#start").addEventListener("click", start);
+      }
+
+      function start() {
+        qs = DB3.buildExam(PER_TOPIC);
+        answers = new Array(qs.length).fill(null);
+        flags = new Array(qs.length).fill(false);
+        cur = 0; startedAt = Date.now();
+        app.innerHTML = '<div class="exam-layout"><div class="quiz" id="q" style="margin:0;max-width:none"></div>' +
+          '<aside class="exam-side"><div class="muted" style="font-size:13px">Verstreken tijd</div><div class="timer" id="timer">00:00</div>' +
+          '<div class="exam-grid" id="grid"></div>' +
+          '<div class="muted" style="font-size:13px;margin-bottom:12px" id="count"></div>' +
+          '<button type="button" class="btn btn-primary btn-small" id="submit" style="width:100%;justify-content:center">Inleveren</button></aside></div>';
+        $("#grid").innerHTML = qs.map((_, i) => '<button type="button" data-i="' + i + '" aria-label="Vraag ' + (i + 1) + '">' + (i + 1) + "</button>").join("");
+        $("#grid").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) go(+b.dataset.i); });
+        $("#submit").addEventListener("click", submit);
+        timerId = setInterval(tick, 1000); tick();
+        render();
+      }
+
+      function tick() { const s = Math.floor((Date.now() - startedAt) / 1000); const el = $("#timer"); if (el) el.textContent = pad(Math.floor(s / 60)) + ":" + pad(s % 60); }
+
+      function paintGrid() {
+        $$("#grid button").forEach((b, i) => {
+          b.classList.toggle("answered", answers[i] !== null);
+          b.classList.toggle("cur", i === cur);
+          b.classList.toggle("flag", flags[i]);
+        });
+        const open = answers.filter((a) => a === null).length;
+        $("#count").textContent = open ? open + " vraag" + (open === 1 ? "" : "en") + " nog open" : "Alles beantwoord";
+      }
+
+      function render() {
+        const pq = qs[cur];
+        const t = DB3.getTopic(pq.topic);
+        $("#q").innerHTML = '<div class="q-meta"><span>Vraag ' + (cur + 1) + " / " + qs.length + "</span><span>" + esc(t.title) + "</span></div>" +
+          DB3.renderQuestionBody(pq) +
+          '<div class="q-nav"><button type="button" class="btn btn-ghost btn-small" id="prev"' + (cur === 0 ? " disabled" : "") + ">← Vorige</button>" +
+          '<button type="button" class="btn btn-ghost btn-small" id="flag">' + (flags[cur] ? "★ Gemarkeerd" : "☆ Markeer") + "</button>" +
+          '<button type="button" class="btn btn-primary btn-small" id="next">' + (cur === qs.length - 1 ? "Naar inleveren" : "Volgende →") + "</button></div>";
+        DB3.enhanceCode($("#q"));
+        $$("#q .opt").forEach((b, i) => { if (answers[cur] === i) b.classList.add("selected"); b.addEventListener("click", () => pick(i)); });
+        $("#prev").addEventListener("click", () => go(cur - 1));
+        $("#next").addEventListener("click", () => (cur === qs.length - 1 ? $("#submit").focus() : go(cur + 1)));
+        $("#flag").addEventListener("click", () => { flags[cur] = !flags[cur]; render(); });
+        paintGrid();
+      }
+
+      function pick(i) { answers[cur] = i; $$("#q .opt").forEach((b, n) => b.classList.toggle("selected", n === i)); paintGrid(); }
+      function go(i) { if (i < 0 || i >= qs.length) return; cur = i; render(); if (window.innerWidth < 960) $("#q").scrollIntoView({ block: "start" }); }
+
+      function submit() {
+        const open = answers.filter((a) => a === null).length;
+        const btn = $("#submit");
+        if (open && !btn.dataset.armed) {
+          btn.dataset.armed = "1"; btn.textContent = open + " open, toch inleveren?";
+          setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = "Inleveren"; } }, 3500);
+          return;
+        }
+        clearInterval(timerId);
+        const secs = Math.round((Date.now() - startedAt) / 1000);
+        const good = qs.filter((q, i) => answers[i] === q.correct).length;
+        const pct = Math.round((good / qs.length) * 100);
+        DB3.exams.add({ date: Date.now(), good, total: qs.length, pct, secs });
+
+        /* per onderwerp */
+        const per = DB3.ordered().map((t) => {
+          const idx = qs.map((q, i) => (q.topic === t.id ? i : -1)).filter((i) => i >= 0);
+          const g = idx.filter((i) => answers[i] === qs[i].correct).length;
+          return { t, g, n: idx.length };
+        }).sort((a, b) => a.g / a.n - b.g / b.n);
+
+        const weak = per.filter((x) => x.g / x.n < 0.67).map((x) => x.t.title);
+        app.innerHTML = '<div class="exam-intro"><div class="result"><span class="eyebrow">Resultaat proeftoets</span><div class="score" style="margin-top:12px">' + good + "<small>/" + qs.length + "</small></div>" +
+          '<p class="lead" style="margin:14px auto 0">' + pct + "% goed in " + Math.floor(secs / 60) + " min " + (secs % 60) + " s. " +
+          (weak.length ? "Herhaal vooral: " + esc(weak.slice(0, 4).join(", ")) + (weak.length > 4 ? " en nog " + (weak.length - 4) + " andere" : "") + "." : "Je scoort op elk onderwerp voldoende.") + "</p>" +
+          '<div class="topic-bars">' + per.map(({ t, g, n }) => {
+            const v = Math.round((g / n) * 100);
+            return '<div class="topic-bar"><a href="onderwerp.html?id=' + t.id + '">' + esc(t.title) + '</a><div class="meter"><i class="' + (v < 50 ? "low" : v < 75 ? "mid" : "") + '" style="--v:' + v + '%"></i></div><span>' + g + "/" + n + "</span></div>";
+          }).join("") + "</div>" +
+          '<div class="hero-actions" style="justify-content:center"><button type="button" class="btn btn-primary" id="again">Nieuwe proeftoets</button><a class="btn btn-ghost" href="index.html">Naar het overzicht</a></div>' +
+          '<h3 style="margin:40px 0 0;text-align:left">Nabespreking</h3><div class="review-list">' + qs.map((q, i) => {
+            const ok = answers[i] === q.correct;
+            return '<details class="review-item ' + (ok ? "ok" : "bad") + '"' + (ok ? "" : " open") + "><summary>" + (i + 1) + ". " + (ok ? "✓ " : "✗ ") + q.q + '</summary><div class="ans">' +
+              (ok ? "" : "Jouw antwoord: " + (answers[i] === null ? "<em>niet beantwoord</em>" : LETTERS[answers[i]] + ". " + q.options[answers[i]]) + "<br>") +
+              "<strong>Juist: " + LETTERS[q.correct] + ". " + q.options[q.correct] + "</strong><br>" + q.explain +
+              ' <a href="onderwerp.html?id=' + q.topic + '">Uitleg ' + esc(DB3.getTopic(q.topic).title) + " →</a></div></details>";
+          }).join("") + "</div></div></div>";
+        $("#again").addEventListener("click", start);
+        window.scrollTo({ top: 0 });
+      }
+
+      document.addEventListener("keydown", (e) => {
+        if (!qs || !$("#grid")) return;
+        const map = { 1: 0, 2: 1, 3: 2, 4: 3, a: 0, b: 1, c: 2, d: 3 };
+        const k = map[e.key.toLowerCase()];
+        if (k !== undefined) { e.preventDefault(); pick(k); }
+        else if (e.key === "ArrowRight") { e.preventDefault(); go(cur + 1); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); go(cur - 1); }
+      });
+    })();
+  </script>
+</body>
+</html>

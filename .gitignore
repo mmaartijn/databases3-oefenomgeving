@@ -1,0 +1,20 @@
+# Bronmateriaal (Brightspace-export + Remindo-toetsvragen) mag NOOIT in de repo komen.
+Assets/
+assets/
+**/Assets/
+**/Remindovragen/
+**/Brightspace/
+*.bak
+*.bacpac
+*.pptx
+*.pdf
+*.sql
+imsmanifest.xml
+
+# Tools / OS
+node_modules/
+.vercel/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,10 @@
+# Nooit bronmateriaal meesturen bij een `vercel deploy` vanaf deze map
+Assets/
+assets/
+scripts/
+*.bak
+*.bacpac
+*.pptx
+*.pdf
+*.sql
+*.md
